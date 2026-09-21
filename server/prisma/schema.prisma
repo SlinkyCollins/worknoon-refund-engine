@@ -1,0 +1,99 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum OrderStatus {
+  DELIVERED
+  IN_TRANSIT
+  CANCELLED
+}
+
+enum DecisionStatus {
+  APPROVED
+  DENIED
+  ESCALATED
+}
+
+enum RefundReasonCategory {
+  DAMAGED_ITEM
+  INCORRECT_ITEM
+  BUYERS_REMORSE
+  LATE_DELIVERY
+  FRAUD_SUSPECTED
+  OTHER
+}
+
+model Customer {
+  id             String          @id @default(uuid())
+  email          String          @unique
+  name           String
+  riskLevel      RiskLevel       @default(LOW)
+  notes          String?
+  createdAt      DateTime        @default(now())
+  orders         Order[]
+  refundRequests RefundRequest[]
+}
+
+model Order {
+  id             String          @id @default(uuid())
+  orderNumber    String          @unique
+  customerId     String
+  customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  totalAmount    Decimal         @db.Decimal(10, 2)
+  isFinalSale    Boolean         @default(false)
+  status         OrderStatus     @default(DELIVERED)
+  purchaseDate   DateTime
+  deliveredDate  DateTime?
+  items          OrderItem[]
+  refundRequests RefundRequest[]
+  createdAt      DateTime        @default(now())
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productName String
+  sku         String
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  quantity    Int      @default(1)
+  isFinalSale Boolean  @default(false)
+}
+
+model RefundRequest {
+  id                String               @id @default(uuid())
+  orderId           String
+  order             Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customerId        String
+  customer          Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  reasonCategory    RefundReasonCategory
+  customerStatement String               @db.Text
+  status            DecisionStatus
+  createdAt         DateTime             @default(now())
+  auditLog          AuditLog?
+}
+
+model AuditLog {
+  id               String         @id @default(uuid())
+  refundRequestId  String         @unique
+  refundRequest    RefundRequest  @relation(fields: [refundRequestId], references: [id], onDelete: Cascade)
+  decision         DecisionStatus
+  confidenceScore  Float
+  rulesTriggered   String[]
+  aiReasoning      String         @db.Text
+  customerMessage  String         @db.Text
+  promptTokensUsed Int?
+  rawPayload       Json?
+  createdAt        DateTime       @default(now())
+}
