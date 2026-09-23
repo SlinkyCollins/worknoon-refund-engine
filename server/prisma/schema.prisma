@@ -7,12 +7,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-enum RiskLevel {
-  LOW
-  MEDIUM
-  HIGH
-}
-
 enum OrderStatus {
   DELIVERED
   IN_TRANSIT
@@ -38,8 +32,6 @@ model Customer {
   id             String          @id @default(uuid())
   email          String          @unique
   name           String
-  riskLevel      RiskLevel       @default(LOW)
-  notes          String?
   createdAt      DateTime        @default(now())
   orders         Order[]
   refundRequests RefundRequest[]
@@ -89,11 +81,8 @@ model AuditLog {
   refundRequestId  String         @unique
   refundRequest    RefundRequest  @relation(fields: [refundRequestId], references: [id], onDelete: Cascade)
   decision         DecisionStatus
-  confidenceScore  Float
   rulesTriggered   String[]
   aiReasoning      String         @db.Text
   customerMessage  String         @db.Text
-  promptTokensUsed Int?
-  rawPayload       Json?
   createdAt        DateTime       @default(now())
 }
