@@ -9,7 +9,7 @@ import {
 } from "@prisma/client";
 import type { PolicyEvaluation } from "./policyEngine.js";
 
-export const DEFAULT_OPENAI_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
+export const DEFAULT_OPENAI_MODEL = "liquid/lfm-2.5-2.6b:free";
 
 export const aiAnalysisSchema = z.object({
   classification: z.enum([

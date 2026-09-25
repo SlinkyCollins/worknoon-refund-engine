@@ -163,7 +163,7 @@ The policy engine and orchestrator enforce the following evaluation rules:
 
 ## AI Integration
 
-- **Model**: `nvidia/nemotron-3-super-120b-a12b:free` (configurable via `OPENAI_MODEL`).
+- **Model**: `liquid/lfm-2.5-2.6b:free` (configurable via `OPENAI_MODEL`).
 - **Endpoint**: OpenRouter API (`https://openrouter.ai/api/v1`) or any OpenAI-compatible API base URL (`OPENAI_BASE_URL`).
 - **Structured Outputs**: Uses `response_format` JSON Schema mode (`json_schema` with `strict: true`) requiring four fields:
   - `classification`: Category classification (`DAMAGED_ITEM`, `INCORRECT_ITEM`, `BUYERS_REMORSE`, `LATE_DELIVERY`, `FRAUD_SUSPECTED`, `OTHER`).
@@ -368,7 +368,7 @@ Fetches a single refund request and its audit log by UUID.
 | `DATABASE_URL` | Server / Root | PostgreSQL database connection string | `postgresql://postgres:postgres@localhost:5432/refund_system?schema=public` |
 | `OPENAI_BASE_URL` | Server / Root | Base URL for OpenAI-compatible endpoint | `https://openrouter.ai/api/v1` |
 | `OPENAI_API_KEY` | Server / Root | API key for OpenAI / OpenRouter authentication | Required for AI evaluation |
-| `OPENAI_MODEL` | Server / Root | Language model identifier | `nvidia/nemotron-3-super-120b-a12b:free` |
+| `OPENAI_MODEL` | Server / Root | Language model identifier | `liquid/lfm-2.5-2.6b:free` |
 | `VITE_API_URL` | Client | Optional base URL for API calls from browser | `""` (uses same-origin relative `/api`) |
 | `VITE_PROXY_TARGET` | Client | Target host for Vite dev/preview `/api` reverse proxy | `http://localhost:5000` (local) / `http://backend:5000` (Docker) |
 
@@ -427,8 +427,13 @@ Frontend runs at `http://localhost:5173`.
 
 ## Docker Setup
 
-The entire stack is configured to run reproducibly via Docker Compose:
+1. Copy environment variables in the project root:
+```bash
+cp .env.example .env
+# Edit .env and supply your OPENAI_API_KEY
+```
 
+2. Start the stack:
 ```bash
 docker compose up --build
 ```
