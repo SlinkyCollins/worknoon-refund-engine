@@ -180,7 +180,91 @@ export function createRefundEvaluationHandler(dependencies: EvaluateRefundDepend
   };
 }
 
+export const adminRefundRequestInclude = {
+  order: {
+    select: {
+      id: true,
+      orderNumber: true,
+    },
+  },
+  customer: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  auditLog: true,
+} as const;
+
+export type AdminRequestsPrismaClient = {
+  refundRequest: {
+    findMany: (args: {
+      orderBy?: { createdAt: "asc" | "desc" };
+      include?: typeof adminRefundRequestInclude;
+    }) => Promise<any>;
+    findUnique: (args: {
+      where: { id: string };
+      include?: typeof adminRefundRequestInclude;
+    }) => Promise<any>;
+  };
+};
+
+export type AdminRequestsDependencies = {
+  prisma?: AdminRequestsPrismaClient | PrismaClient;
+};
+
+export function createGetAdminRequestsHandler(dependencies: AdminRequestsDependencies = {}) {
+  const db = (dependencies.prisma ?? prisma) as unknown as AdminRequestsPrismaClient;
+
+  return async (_req: express.Request, res: express.Response): Promise<void> => {
+    try {
+      const requests = await db.refundRequest.findMany({
+        orderBy: { createdAt: "desc" },
+        include: adminRefundRequestInclude,
+      });
+
+      res.json(requests);
+    } catch (error) {
+      console.error("Failed to fetch refund requests", error);
+      res.status(500).json({ error: "Unable to fetch refund requests" });
+    }
+  };
+}
+
+export function createGetAdminRequestByIdHandler(dependencies: AdminRequestsDependencies = {}) {
+  const db = (dependencies.prisma ?? prisma) as unknown as AdminRequestsPrismaClient;
+
+  return async (req: express.Request, res: express.Response): Promise<void> => {
+    const idResult = z.string().uuid().safeParse(req.params.id);
+
+    if (!idResult.success) {
+      res.status(400).json({ error: "Refund request id must be a valid UUID" });
+      return;
+    }
+
+    try {
+      const refundRequest = await db.refundRequest.findUnique({
+        where: { id: idResult.data },
+        include: adminRefundRequestInclude,
+      });
+
+      if (!refundRequest) {
+        res.status(404).json({ error: "Refund request not found" });
+        return;
+      }
+
+      res.json(refundRequest);
+    } catch (error) {
+      console.error("Failed to fetch refund request", error);
+      res.status(500).json({ error: "Unable to fetch refund request" });
+    }
+  };
+}
+
 app.post("/api/refunds/evaluate", createRefundEvaluationHandler());
+app.get("/api/admin/requests", createGetAdminRequestsHandler());
+app.get("/api/admin/requests/:id", createGetAdminRequestByIdHandler());
 
 export { app };
 

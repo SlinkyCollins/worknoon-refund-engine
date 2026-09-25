@@ -6,6 +6,10 @@ import express from "express";
 import { RefundReasonCategory, DecisionStatus } from "@prisma/client";
 import {
   createRefundEvaluationHandler,
+  createGetAdminRequestsHandler,
+  createGetAdminRequestByIdHandler,
+  adminRefundRequestInclude,
+  type AdminRequestsDependencies,
   evaluateRefundRequestSchema,
   app as defaultApp,
 } from "./index.js";
@@ -407,6 +411,318 @@ describe("POST /api/refunds/evaluate endpoint", () => {
         const data = (await response.json()) as any;
         assert.equal(data.error, "Unable to process refund request");
         assert.equal(JSON.stringify(data).includes("SECRET_API_KEY"), false);
+      } finally {
+        await close();
+      }
+    });
+  });
+});
+
+function buildAdminTestApp(dependencies: AdminRequestsDependencies = {}) {
+  const testApp = express();
+  testApp.use(express.json());
+  testApp.get("/api/admin/requests", createGetAdminRequestsHandler(dependencies));
+  testApp.get("/api/admin/requests/:id", createGetAdminRequestByIdHandler(dependencies));
+  return testApp;
+}
+
+function mockAdminRefundRecord(id: string, overrides: Record<string, any> = {}) {
+  const createdAt = overrides.createdAt ?? new Date("2026-09-25T10:00:00.000Z");
+  return {
+    id,
+    orderId: "e1e1e1e1-e1e1-41e1-81e1-e1e1e1e1e1e1",
+    customerId: "c1c1c1c1-c1c1-41c1-81c1-c1c1c1c1c1c1",
+    reasonCategory: RefundReasonCategory.DAMAGED_ITEM,
+    customerStatement: "The ceramic dripper was shattered upon arrival.",
+    status: DecisionStatus.APPROVED,
+    createdAt,
+    order: {
+      id: "e1e1e1e1-e1e1-41e1-81e1-e1e1e1e1e1e1",
+      orderNumber: "WN-9001",
+    },
+    customer: {
+      id: "c1c1c1c1-c1c1-41c1-81c1-c1c1c1c1c1c1",
+      name: "Alice Smith",
+      email: "alice@example.com",
+    },
+    auditLog: {
+      id: `audit-${id}`,
+      refundRequestId: id,
+      decision: DecisionStatus.APPROVED,
+      rulesTriggered: [],
+      aiReasoning: "Customer provided clear photographic evidence of breakage.",
+      customerMessage: "Your refund request has been approved.",
+      createdAt,
+    },
+    ...overrides,
+  };
+}
+
+describe("Admin endpoints", () => {
+  describe("GET /api/admin/requests", () => {
+    it("returns persisted refund requests", async () => {
+      const records = [
+        mockAdminRefundRecord("req-1"),
+        mockAdminRefundRecord("req-2"),
+      ];
+
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async () => records,
+            findUnique: async () => null,
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests`);
+        assert.equal(response.status, 200);
+        const data = (await response.json()) as any[];
+        assert.equal(Array.isArray(data), true);
+        assert.equal(data.length, 2);
+        assert.equal(data[0].id, "req-1");
+        assert.equal(data[1].id, "req-2");
+      } finally {
+        await close();
+      }
+    });
+
+    it("returns an empty array when there are no requests", async () => {
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async () => [],
+            findUnique: async () => null,
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests`);
+        assert.equal(response.status, 200);
+        const data = (await response.json()) as any[];
+        assert.equal(Array.isArray(data), true);
+        assert.equal(data.length, 0);
+      } finally {
+        await close();
+      }
+    });
+
+    it("queries requests ordered newest first", async () => {
+      let capturedArgs: any;
+      const recordNewer = mockAdminRefundRecord("req-newer", {
+        createdAt: new Date("2026-09-25T11:00:00.000Z"),
+      });
+      const recordOlder = mockAdminRefundRecord("req-older", {
+        createdAt: new Date("2026-09-24T10:00:00.000Z"),
+      });
+
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async (args: any) => {
+              capturedArgs = args;
+              return [recordNewer, recordOlder];
+            },
+            findUnique: async () => null,
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests`);
+        assert.equal(response.status, 200);
+        assert.deepEqual(capturedArgs?.orderBy, { createdAt: "desc" });
+
+        const data = (await response.json()) as any[];
+        assert.equal(data[0].id, "req-newer");
+        assert.equal(data[1].id, "req-older");
+      } finally {
+        await close();
+      }
+    });
+
+    it("includes customer, order, and audit log data in the returned response", async () => {
+      let capturedArgs: any;
+      const record = mockAdminRefundRecord("req-complete");
+
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async (args: any) => {
+              capturedArgs = args;
+              return [record];
+            },
+            findUnique: async () => null,
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests`);
+        assert.equal(response.status, 200);
+        assert.ok(capturedArgs?.include?.order);
+        assert.ok(capturedArgs?.include?.customer);
+        assert.ok(capturedArgs?.include?.auditLog);
+
+        const data = (await response.json()) as any[];
+        const item = data[0];
+
+        assert.equal(item.id, "req-complete");
+        assert.equal(item.orderId, "e1e1e1e1-e1e1-41e1-81e1-e1e1e1e1e1e1");
+        assert.equal(item.order.orderNumber, "WN-9001");
+        assert.equal(item.customer.id, "c1c1c1c1-c1c1-41c1-81c1-c1c1c1c1c1c1");
+        assert.equal(item.customer.name, "Alice Smith");
+        assert.equal(item.customer.email, "alice@example.com");
+        assert.equal(item.reasonCategory, RefundReasonCategory.DAMAGED_ITEM);
+        assert.equal(item.customerStatement, "The ceramic dripper was shattered upon arrival.");
+        assert.equal(item.status, DecisionStatus.APPROVED);
+        assert.ok(item.createdAt);
+        assert.ok(item.auditLog);
+        assert.equal(item.auditLog.decision, DecisionStatus.APPROVED);
+        assert.deepEqual(item.auditLog.rulesTriggered, []);
+        assert.equal(item.auditLog.aiReasoning, "Customer provided clear photographic evidence of breakage.");
+        assert.equal(item.auditLog.customerMessage, "Your refund request has been approved.");
+        assert.ok(item.auditLog.createdAt);
+      } finally {
+        await close();
+      }
+    });
+
+    it("returns 500 when database fails without leaking error details", async () => {
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async () => {
+              throw new Error("PG_CONNECTION_TIMEOUT_SECRET_API_KEY_9999");
+            },
+            findUnique: async () => null,
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests`);
+        assert.equal(response.status, 500);
+        const data = (await response.json()) as any;
+        assert.equal(data.error, "Unable to fetch refund requests");
+        assert.equal(JSON.stringify(data).includes("SECRET_API_KEY"), false);
+      } finally {
+        await close();
+      }
+    });
+  });
+
+  describe("GET /api/admin/requests/:id", () => {
+    it("returns a single refund request when found by valid UUID", async () => {
+      let capturedArgs: any;
+      const record = mockAdminRefundRecord(VALID_UUID);
+
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async () => [],
+            findUnique: async (args: any) => {
+              capturedArgs = args;
+              return record;
+            },
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests/${VALID_UUID}`);
+        assert.equal(response.status, 200);
+        assert.equal(capturedArgs?.where?.id, VALID_UUID);
+        assert.ok(capturedArgs?.include?.order);
+        assert.ok(capturedArgs?.include?.customer);
+        assert.ok(capturedArgs?.include?.auditLog);
+
+        const data = (await response.json()) as any;
+        assert.equal(data.id, VALID_UUID);
+        assert.equal(data.order.orderNumber, "WN-9001");
+        assert.equal(data.customer.name, "Alice Smith");
+        assert.equal(data.customer.email, "alice@example.com");
+        assert.equal(data.auditLog.decision, DecisionStatus.APPROVED);
+        assert.equal(data.auditLog.customerMessage, "Your refund request has been approved.");
+      } finally {
+        await close();
+      }
+    });
+
+    it("returns 400 when request ID is not a valid UUID", async () => {
+      let findUniqueCalled = false;
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async () => [],
+            findUnique: async () => {
+              findUniqueCalled = true;
+              return null;
+            },
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests/invalid-not-a-uuid`);
+        assert.equal(response.status, 400);
+        const data = (await response.json()) as any;
+        assert.equal(data.error, "Refund request id must be a valid UUID");
+        assert.equal(findUniqueCalled, false);
+      } finally {
+        await close();
+      }
+    });
+
+    it("returns 404 when request is not found", async () => {
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async () => [],
+            findUnique: async () => null,
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests/${NON_EXISTENT_UUID}`);
+        assert.equal(response.status, 404);
+        const data = (await response.json()) as any;
+        assert.equal(data.error, "Refund request not found");
+      } finally {
+        await close();
+      }
+    });
+
+    it("returns 500 when database fails without leaking error details", async () => {
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async () => [],
+            findUnique: async () => {
+              throw new Error("INTERNAL_DATABASE_DEADLOCK_SECRET_TOKEN_8888");
+            },
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests/${VALID_UUID}`);
+        assert.equal(response.status, 500);
+        const data = (await response.json()) as any;
+        assert.equal(data.error, "Unable to fetch refund request");
+        assert.equal(JSON.stringify(data).includes("SECRET_TOKEN"), false);
       } finally {
         await close();
       }
