@@ -119,7 +119,7 @@ onMounted(() => {
         <!-- Dashboard Header -->
         <header class="px-6 py-4 border-b border-gray-200 bg-gray-50/80 flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 class="text-xl font-bold tracking-tight text-gray-900">Refund Support — Admin</h1>
+            <h1 class="text-xl font-bold tracking-tight text-gray-900">Admin</h1>
             <p class="text-xs text-gray-500 mt-0.5">Audit trail and evaluation history</p>
           </div>
           <div class="flex items-center gap-3">

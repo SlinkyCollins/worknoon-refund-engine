@@ -264,9 +264,6 @@ async function copyRequestId() {
       <header class="mb-8 text-center sm:text-left sm:flex sm:items-center sm:justify-between pb-6 border-b border-gray-200">
         <div>
           <div class="flex items-center gap-2 justify-center sm:justify-start">
-            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-600 text-white font-bold text-lg shadow-sm">
-              W
-            </span>
             <h1 class="text-2xl font-bold tracking-tight text-gray-900">Refund Support</h1>
           </div>
           <p class="mt-1 text-sm text-gray-600">
@@ -637,7 +634,7 @@ async function copyRequestId() {
               <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">Step 3 of 3</span>
               <h2 class="text-lg font-semibold text-gray-900 mt-0.5">Describe What Happened</h2>
               <p class="text-xs text-gray-500 mt-1">
-                Please provide details so our automated refund policy engine and AI assistant can review your claim.
+                Please provide details so our AI assistant can review your claim.
               </p>
             </div>
 
