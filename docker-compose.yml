@@ -11,6 +11,53 @@ services:
       - "5432:5432"
     volumes:
       - refund_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d refund_system"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: worknoon-refund-backend
+    restart: unless-stopped
+    env_file:
+      - path: ./server/.env
+        required: false
+      - path: ./.env
+        required: false
+    environment:
+      PORT: 5000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/refund_system?schema=public
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-nvidia/nemotron-3-super-120b-a12b:free}
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: worknoon-refund-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
   refund_postgres_data:
