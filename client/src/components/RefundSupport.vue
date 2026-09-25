@@ -382,22 +382,42 @@ async function copyRequestId() {
           </div>
 
           <!-- Order Summary for context -->
-          <div v-if="evaluatedOrderSnapshot" class="mt-6 pt-5 border-t border-gray-200/80 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-            <div>
-              <span class="text-gray-500 block">Order Number</span>
-              <span class="font-semibold text-gray-900 text-sm">{{ evaluatedOrderSnapshot.orderNumber }}</span>
+          <div v-if="evaluatedOrderSnapshot" class="mt-6 pt-5 border-t border-gray-200/80 space-y-3 text-xs">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <span class="text-gray-500 block">Order Number</span>
+                <span class="font-semibold text-gray-900 text-sm">{{ evaluatedOrderSnapshot.orderNumber }}</span>
+              </div>
+              <div>
+                <span class="text-gray-500 block">Order Total</span>
+                <span class="font-semibold text-gray-900 text-sm">{{ formatCurrency(evaluatedOrderSnapshot.totalAmount) }}</span>
+              </div>
+              <div>
+                <span class="text-gray-500 block">Customer</span>
+                <span class="font-semibold text-gray-900 text-sm truncate block">{{ evaluatedOrderSnapshot.customerName }}</span>
+              </div>
+              <div>
+                <span class="text-gray-500 block">Submitted Reason</span>
+                <span class="font-semibold text-gray-900 text-sm">{{ selectedReason }}</span>
+              </div>
             </div>
-            <div>
-              <span class="text-gray-500 block">Order Total</span>
-              <span class="font-semibold text-gray-900 text-sm">{{ formatCurrency(evaluatedOrderSnapshot.totalAmount) }}</span>
-            </div>
-            <div>
-              <span class="text-gray-500 block">Customer</span>
-              <span class="font-semibold text-gray-900 text-sm truncate block">{{ evaluatedOrderSnapshot.customerName }}</span>
-            </div>
-            <div>
-              <span class="text-gray-500 block">Submitted Reason</span>
-              <span class="font-semibold text-gray-900 text-sm">{{ selectedReason }}</span>
+
+            <!-- Items summary in result -->
+            <div v-if="evaluatedOrderSnapshot.items && evaluatedOrderSnapshot.items.length > 0" class="pt-2 border-t border-gray-200/60">
+              <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                Purchased Items ({{ evaluatedOrderSnapshot.items.length }})
+              </span>
+              <div class="flex flex-wrap gap-2">
+                <span
+                  v-for="item in evaluatedOrderSnapshot.items"
+                  :key="item.id"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/90 border border-gray-200 text-gray-800 text-xs shadow-2xs"
+                >
+                  <span class="font-medium text-gray-900">{{ item.productName }}</span>
+                  <span class="text-gray-400 font-mono text-[11px]">(Qty {{ item.quantity }} × {{ formatCurrency(item.unitPrice) }})</span>
+                  <span v-if="item.isFinalSale" class="text-[10px] font-bold text-amber-700 bg-amber-50 px-1 py-0.2 rounded border border-amber-200">Final Sale</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -544,6 +564,34 @@ async function copyRequestId() {
                 <div>
                   <span class="text-gray-400 block">Customer:</span>
                   <span class="font-medium text-gray-700 truncate block">{{ selectedOrder.customerName }}</span>
+                </div>
+              </div>
+
+              <!-- Order Items Section -->
+              <div v-if="selectedOrder.items && selectedOrder.items.length > 0" class="pt-2.5 border-t border-gray-200">
+                <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">
+                  Items in this order ({{ selectedOrder.items.length }})
+                </span>
+                <div class="space-y-1.5">
+                  <div
+                    v-for="item in selectedOrder.items"
+                    :key="item.id"
+                    class="flex items-center justify-between text-xs bg-white border border-gray-200 rounded-md px-2.5 py-1.5 shadow-2xs"
+                  >
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span class="font-medium text-gray-900 truncate">{{ item.productName }}</span>
+                      <span class="text-gray-400 font-mono text-[11px] shrink-0">({{ item.sku }})</span>
+                      <span
+                        v-if="item.isFinalSale"
+                        class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0"
+                      >
+                        Final Sale
+                      </span>
+                    </div>
+                    <div class="text-gray-700 font-mono text-xs shrink-0 ml-2">
+                      <span class="text-gray-400 font-sans">Qty {{ item.quantity }} ×</span> {{ formatCurrency(item.unitPrice) }}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

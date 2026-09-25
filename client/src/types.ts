@@ -47,6 +47,15 @@ export const REFUND_REASON_OPTIONS: ReasonOption[] = [
   },
 ];
 
+export interface OrderItem {
+  id: string;
+  productName: string;
+  sku: string;
+  unitPrice: string | number;
+  quantity: number;
+  isFinalSale: boolean;
+}
+
 export interface OrderSummary {
   id: string;
   orderNumber: string;
@@ -55,6 +64,7 @@ export interface OrderSummary {
   purchaseDate: string;
   deliveredDate: string | null;
   isFinalSale: boolean;
+  items?: OrderItem[];
 }
 
 export interface Customer {

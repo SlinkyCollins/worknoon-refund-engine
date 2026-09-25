@@ -42,6 +42,16 @@ app.get("/api/customers", async (_req, res) => {
             purchaseDate: true,
             deliveredDate: true,
             isFinalSale: true,
+            items: {
+              select: {
+                id: true,
+                productName: true,
+                sku: true,
+                unitPrice: true,
+                quantity: true,
+                isFinalSale: true,
+              },
+            },
           },
           orderBy: { purchaseDate: "desc" },
         },
