@@ -83,3 +83,33 @@ export interface ApiErrorResponse {
   message?: string;
   details?: Array<{ field?: string; message?: string }>;
 }
+
+export interface AdminAuditLog {
+  id: string;
+  refundRequestId: string;
+  decision: RefundDecisionStatus;
+  rulesTriggered: string[];
+  aiReasoning: string;
+  customerMessage: string;
+  createdAt: string;
+}
+
+export interface AdminRefundRequest {
+  id: string;
+  orderId: string;
+  customerId: string;
+  reasonCategory: RefundReasonCategory | string;
+  customerStatement: string;
+  status: RefundDecisionStatus;
+  createdAt: string;
+  order: {
+    id: string;
+    orderNumber: string;
+  };
+  customer: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  auditLog: AdminAuditLog | null;
+}

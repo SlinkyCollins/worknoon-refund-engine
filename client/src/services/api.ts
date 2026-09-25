@@ -3,6 +3,7 @@ import type {
   EvaluateRefundPayload,
   EvaluateRefundResponse,
   ApiErrorResponse,
+  AdminRefundRequest,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -115,6 +116,58 @@ export async function submitRefundEvaluation(
       error instanceof Error
         ? `Network connection error: ${error.message}`
         : 'Unable to reach the refund service. Please check your network and try again.';
+    throw new ApiError(message);
+  }
+}
+
+export async function getAdminRequests(): Promise<AdminRefundRequest[]> {
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/requests`, {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorMessage = await parseErrorResponse(response);
+      throw new ApiError(errorMessage, response.status);
+    }
+
+    return (await response.json()) as AdminRefundRequest[];
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    const message =
+      error instanceof Error
+        ? `Network connection error: ${error.message}`
+        : 'Unable to fetch admin refund requests. Please ensure the backend is running.';
+    throw new ApiError(message);
+  }
+}
+
+export async function getAdminRequestById(id: string): Promise<AdminRefundRequest> {
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/requests/${id}`, {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorMessage = await parseErrorResponse(response);
+      throw new ApiError(errorMessage, response.status);
+    }
+
+    return (await response.json()) as AdminRefundRequest;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    const message =
+      error instanceof Error
+        ? `Network connection error: ${error.message}`
+        : 'Unable to fetch refund request details.';
     throw new ApiError(message);
   }
 }
