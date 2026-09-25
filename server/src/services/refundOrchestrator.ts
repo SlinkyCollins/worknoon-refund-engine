@@ -183,21 +183,31 @@ export async function orchestrateRefund(
   // The AI can flag suspicious/conflicting content (e.g. prompt-injection attempts),
   // but it can never DENY — the worst it can trigger is ESCALATED.
   if (aiAnalysis.suspicious) {
+    const customerMessage =
+      aiAnalysis.customerMessage && !/approv/i.test(aiAnalysis.customerMessage)
+        ? aiAnalysis.customerMessage
+        : "Your request has been escalated to our support team for human review.";
+
     return {
       status: "ESCALATED",
       rulesTriggered: [...policyEvaluation.rulesTriggered, "AI_FLAGGED_SUSPICIOUS"],
       aiReasoning: aiAnalysis.reasoning,
-      customerMessage: aiAnalysis.customerMessage,
+      customerMessage,
       policyEvaluation,
       aiAnalysis,
     };
   }
 
+  const customerMessage =
+    aiAnalysis.customerMessage && /approv/i.test(aiAnalysis.customerMessage)
+      ? aiAnalysis.customerMessage
+      : "Your refund request has been approved.";
+
   return {
     status: "APPROVED",
     rulesTriggered: [...policyEvaluation.rulesTriggered],
     aiReasoning: aiAnalysis.reasoning,
-    customerMessage: aiAnalysis.customerMessage,
+    customerMessage,
     policyEvaluation,
     aiAnalysis,
   };
