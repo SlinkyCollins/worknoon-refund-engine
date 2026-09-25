@@ -1,8 +1,19 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, RefundReasonCategory } from "@prisma/client";
 import { z } from "zod";
+import {
+  orchestrateRefund,
+  OrderNotFoundError,
+  type OrchestrateRefundInput,
+  type OrchestrateRefundResult,
+} from "./services/refundOrchestrator.js";
+import {
+  persistRefundDecision,
+  type PersistRefundDecisionInput,
+  type PersistedRefundRecord,
+} from "./services/refundPersistence.js";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -96,6 +107,90 @@ app.get("/api/orders/:id", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+export const evaluateRefundRequestSchema = z
+  .object({
+    orderId: z.string().uuid("Order id must be a valid UUID"),
+    reasonCategory: z.nativeEnum(RefundReasonCategory, {
+      message: "Invalid refund reason category",
+    }),
+    customerStatement: z
+      .string()
+      .trim()
+      .min(1, "Customer statement cannot be empty"),
+  })
+  .strict();
+
+export type EvaluateRefundRequestBody = z.infer<typeof evaluateRefundRequestSchema>;
+
+export type EvaluateRefundDependencies = {
+  orchestrate?: (input: OrchestrateRefundInput) => Promise<OrchestrateRefundResult>;
+  persist?: (input: PersistRefundDecisionInput) => Promise<PersistedRefundRecord>;
+};
+
+export function createRefundEvaluationHandler(dependencies: EvaluateRefundDependencies = {}) {
+  const orchestrate = dependencies.orchestrate ?? orchestrateRefund;
+  const persist = dependencies.persist ?? persistRefundDecision;
+
+  return async (req: express.Request, res: express.Response): Promise<void> => {
+    const parseResult = evaluateRefundRequestSchema.safeParse(req.body);
+
+    if (!parseResult.success) {
+      res.status(400).json({
+        error: parseResult.error.issues[0]?.message ?? "Invalid request payload",
+        details: parseResult.error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      });
+      return;
+    }
+
+    const { orderId, reasonCategory, customerStatement } = parseResult.data;
+
+    try {
+      const decision = await orchestrate({
+        orderId,
+        reasonCategory,
+        customerStatement,
+      });
+
+      const persisted = await persist({
+        orderId,
+        reasonCategory,
+        customerStatement,
+        decision,
+      });
+
+      res.status(200).json({
+        refundRequestId: persisted.id,
+        status: persisted.status,
+        rulesTriggered: persisted.auditLog?.rulesTriggered ?? decision.rulesTriggered,
+        aiReasoning: persisted.auditLog?.aiReasoning ?? decision.aiReasoning,
+        customerMessage: persisted.auditLog?.customerMessage ?? decision.customerMessage,
+      });
+    } catch (error) {
+      if (error instanceof OrderNotFoundError) {
+        res.status(404).json({ error: "Order not found" });
+        return;
+      }
+
+      console.error("Failed to evaluate refund request", error);
+      res.status(500).json({ error: "Unable to process refund request" });
+    }
+  };
+}
+
+app.post("/api/refunds/evaluate", createRefundEvaluationHandler());
+
+export { app };
+
+const isTest =
+  process.env.NODE_ENV === "test" ||
+  process.env.npm_lifecycle_event === "test" ||
+  process.argv.some((arg) => arg.includes("test"));
+
+if (!isTest) {
+  app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+  });
+}

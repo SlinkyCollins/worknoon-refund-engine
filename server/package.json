@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "test": "node --import tsx --test src/services/policyEngine.test.ts src/services/aiService.test.ts src/services/refundOrchestrator.test.ts src/services/refundPersistence.test.ts",
+    "test": "node --import tsx --test src/services/policyEngine.test.ts src/services/aiService.test.ts src/services/refundOrchestrator.test.ts src/services/refundPersistence.test.ts src/index.test.ts",
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
