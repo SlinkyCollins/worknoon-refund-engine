@@ -2,6 +2,10 @@
 
 An AI-powered customer support refund evaluation system that pairs deterministic business policy rules with an LLM evaluation layer to process, audit, and explain refund requests across customer-facing and administrative interfaces.
 
+## Demo Walkthrough
+
+- **Video Demo Walkthrough**: [Watch the 4-Minute Walkthrough](https://www.loom.com/share/7ff968ecd338426394d5cb6f55a7e643)
+
 ---
 
 ## Overview
