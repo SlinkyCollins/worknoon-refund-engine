@@ -362,9 +362,15 @@ Fetches a single refund request and its audit log by UUID.
 
 ## Environment Variables
 
+Keep server secrets in ignored `.env` files or the Render environment settings. `DATABASE_URL` and `OPENAI_API_KEY` are server-only secrets. `VITE_API_URL` is public and is the only production frontend value required by this application. `NODE_ENV`, `SEED_ON_START`, and `FRONTEND_ORIGIN` control production startup and CORS behavior; see the deployment section below.
+
 | Variable | Location | Description | Default / Example |
 | :--- | :--- | :--- | :--- |
 | `PORT` | Server / Root | Port for the Express backend server | `5000` |
+| `NODE_ENV` | Server | Runtime environment; use `production` on Render | `development` |
+| `SEED_ON_START` | Server | Runs the destructive demo seed during startup; only local Compose sets this to `true` | `false` |
+| `FRONTEND_ORIGIN` | Server | Production frontend origin used by the CORS allowlist | `http://localhost:5173` |
+| `CORS_ORIGINS` | Server | Optional comma-separated additional production CORS origins | Empty |
 | `DATABASE_URL` | Server / Root | PostgreSQL database connection string | `postgresql://postgres:postgres@localhost:5432/refund_system?schema=public` |
 | `OPENAI_BASE_URL` | Server / Root | Base URL for OpenAI-compatible endpoint | `https://openrouter.ai/api/v1` |
 | `OPENAI_API_KEY` | Server / Root | API key for OpenAI / OpenRouter authentication | Required for AI evaluation |
@@ -375,6 +381,8 @@ Fetches a single refund request and its audit log by UUID.
 ---
 
 ## Local Development
+
+For the reproducible local setup, prefer the Docker Compose instructions below. The backend's `SEED_ON_START` setting is intentionally explicit: local Compose sets it to `true`, while the production image defaults to `false`.
 
 ### Prerequisites
 - Node.js 20+
@@ -427,6 +435,8 @@ Frontend runs at `http://localhost:5173`.
 
 ## Docker Setup
 
+The backend image runs Prisma migrations before the API starts. It only runs the destructive demo seed when `SEED_ON_START=true`, which is set explicitly by local Compose and must not be set in production.
+
 1. Copy environment variables in the project root:
 ```bash
 cp .env.example .env
@@ -440,11 +450,11 @@ docker compose up --build
 
 ### Startup Dependency Flow
 ```
-PostgreSQL (healthy) ➔ Prisma Migrations (deploy) ➔ Mock Seed (db:seed) ➔ Express Backend (healthy) ➔ Frontend Preview
+PostgreSQL (healthy) ➔ Prisma Migrations (deploy) ➔ Local Mock Seed (explicit opt-in) ➔ Express Backend (ready) ➔ Frontend Preview
 ```
 
 1. **`postgres`**: Launches PostgreSQL 16 on port 5432 with health check `pg_isready`.
-2. **`backend`**: Waits for PostgreSQL to become healthy, runs `npx prisma migrate deploy`, seeds database fixtures with `npm run db:seed`, and launches Express on port 5000 with a `/health` probe.
+2. **`backend`**: Waits for PostgreSQL to become healthy, runs `npx prisma migrate deploy`, runs `npm run db:seed` because Compose explicitly sets `SEED_ON_START=true`, and launches Express on port 5000 with a `/ready` probe.
 3. **`frontend`**: Waits for backend to become healthy, serves production build via Vite preview on port 5173, and proxies `/api` requests to `http://backend:5000`.
 
 To stop the services and remove containers:
@@ -455,6 +465,59 @@ To remove volumes and start from a completely clean state:
 ```bash
 docker compose down -v
 ```
+`docker compose down` preserves the named PostgreSQL volume and its data. `docker compose down -v` permanently deletes the local database volume and all local demo data; use it only for an intentional reset. The next `docker compose up --build` reapplies migrations and recreates the fixtures.
+
+`GET /health` is a liveness check and does not access PostgreSQL. `GET /ready` checks database connectivity and is used by the Compose health check.
+
+## Production Deployment (Render + Aiven)
+
+Production uses the backend image from `server/Dockerfile` and a separately built frontend static site. The backend image runs `prisma migrate deploy` before `npm start`; it does not seed because its image default is `SEED_ON_START=false`. Never use `prisma migrate dev` or routine `prisma db push` against Aiven.
+
+### Render backend Docker service
+
+Create a Docker web service for this repository with:
+
+- Dockerfile path: `server/Dockerfile`
+- Docker build context: `server`
+- Health check path: `/ready`
+- Port: `5000` (or the `PORT` value supplied by Render)
+- `NODE_ENV=production`
+- `DATABASE_URL` set to Aiven's TLS connection URL
+- `FRONTEND_ORIGIN` set to the deployed frontend URL
+- The required `OPENAI_BASE_URL`, `OPENAI_API_KEY`, and `OPENAI_MODEL` values
+
+Do not set `SEED_ON_START=true` in Render. If the Render UI does not expose a Docker context field for the selected service type, configure the repository root directory as `server` and use `Dockerfile` as the Dockerfile path. Verify the build logs show `server` as the build context.
+
+### Render frontend static site
+
+Create a Static Site using the repository root, or set its root directory to `client`:
+
+- Build command from the repository root: `cd client && npm ci && npm run build` (from `client`: `npm ci && npm run build`)
+- Publish directory from the repository root: `client/dist` (from `client`: `dist`)
+- Public variable: `VITE_API_URL=https://<your-backend>.onrender.com`
+
+`VITE_API_URL` is embedded in browser assets and must contain only the public API URL. Never put `DATABASE_URL`, `OPENAI_API_KEY`, or another secret in a `VITE_` variable. Add a `/*` to `/index.html` rewrite if the Render static-site configuration requires one for Vue Router history mode.
+
+### Aiven database and one-time seed
+
+Copy Aiven's connection string exactly, including TLS parameters, into Render's secret `DATABASE_URL`. Verify the database name, SSL mode, certificate requirements, connection limits, and service region in the Aiven console instead of assuming defaults.
+
+After the first Render deployment reports `/ready` as healthy, run the seed once from a controlled machine with Docker. This does not depend on Render Shell availability:
+
+```powershell
+docker build -t worknoon-refund-backend-seed .\server
+$env:PRODUCTION_DATABASE_URL = "<paste the Aiven connection URL locally; do not commit it>"
+docker run --rm `
+  -e DATABASE_URL="$env:PRODUCTION_DATABASE_URL" `
+  -e SEED_ON_START=false `
+  worknoon-refund-backend-seed `
+  sh -c "npx prisma migrate deploy && npm run db:seed"
+Remove-Item Env:PRODUCTION_DATABASE_URL
+```
+
+The command uses the same Dockerfile and built application dependencies as the Render service, applies pending migrations before seeding, and exits after completion. Confirm `PRODUCTION_DATABASE_URL` points to the intended empty demo database first; the seed is intentionally destructive. Verify the synthetic data with `SELECT COUNT(*) FROM "Customer";`, `SELECT COUNT(*) FROM "Order";`, and `SELECT COUNT(*) FROM "RefundRequest";`. Leave `SEED_ON_START` unset or set to `false` in Render; deploys, restarts, and crashes must not rerun the seed.
+
+Never commit or expose the URL. Smoke-test the customer flow at the frontend root, the admin dashboard at `/admin`, and the backend `/health` and `/ready` endpoints. Inspect Render runtime logs and Aiven metrics for migration or connection errors. All records are synthetic portfolio-demo data; this is not a production payment-processing service.
 
 ---
 

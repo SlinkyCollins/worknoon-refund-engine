@@ -17,4 +17,6 @@ RUN npm run build
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run db:seed && npm start"]
+ENV SEED_ON_START=false
+
+CMD ["sh", "./start.sh"]

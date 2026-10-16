@@ -18,12 +18,42 @@ import {
 const app = express();
 const prisma = new PrismaClient();
 const port = Number(process.env.PORT ?? 5000);
+const isProduction = process.env.NODE_ENV === "production";
+const configuredOrigins = [
+  ...(process.env.FRONTEND_ORIGIN?.split(",") ?? []),
+  ...(process.env.CORS_ORIGINS?.split(",") ?? []),
+].map((origin) => origin.trim()).filter(Boolean);
 
-app.use(cors());
+if (isProduction && configuredOrigins.length === 0) {
+  throw new Error("FRONTEND_ORIGIN or CORS_ORIGINS must be configured in production");
+}
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || !isProduction || configuredOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Origin is not allowed by CORS"));
+    },
+  }),
+);
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+app.get("/ready", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "ready" });
+  } catch (error) {
+    console.error("Database readiness check failed", error);
+    res.status(503).json({ status: "not_ready" });
+  }
 });
 
 app.get("/api/customers", async (_req, res) => {
@@ -284,7 +314,7 @@ const isTest =
   process.argv.some((arg) => arg.includes("test"));
 
 if (!isTest) {
-  app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Server running on port ${port}`);
   });
 }
