@@ -26,6 +26,83 @@ export type OrchestratorRule = PolicyRule | "AI_FLAGGED_SUSPICIOUS" | "AI_ANALYS
 
 export type FinalStatus = "APPROVED" | "DENIED" | "ESCALATED";
 
+export const customerMessageFallbacks: Record<FinalStatus, string> = {
+  APPROVED:
+    "Your refund request has been approved. The refund has not necessarily been completed or paid out yet.",
+  DENIED: "Your refund request has been denied based on the applicable refund policy.",
+  ESCALATED:
+    "Your request has been escalated to our support team for human review. A final decision is pending.",
+};
+
+function containsApprovalLanguage(message: string): boolean {
+  return /\bapprove(?:d|s|d)?\b|\bapproval\b|\bapproving\b/i.test(message);
+}
+
+function containsDenialLanguage(message: string): boolean {
+  return /\bden(?:y|ied|ies|ial)\b|\breject(?:ed|s|ion)?\b|\brefus(?:e|ed|al)\b/i.test(message);
+}
+
+function containsEscalationLanguage(message: string): boolean {
+  return /\bescalat(?:e|ed|ion|ing)\b|\bhuman review\b|\bsupport review\b|\bmanual review\b/i.test(
+    message,
+  );
+}
+
+/**
+ * Keeps customer-facing wording aligned with the status synthesized by this module.
+ * Uncertain or contradictory AI wording is replaced with an application-owned message.
+ */
+export function validateCustomerMessage(
+  status: FinalStatus,
+  proposedMessage: string | null | undefined,
+): string {
+  if (typeof proposedMessage !== "string") {
+    return customerMessageFallbacks[status];
+  }
+
+  const message = proposedMessage.trim();
+  if (!message || message.length > 1_000) {
+    return customerMessageFallbacks[status];
+  }
+
+  const approval = containsApprovalLanguage(message);
+  const denial = containsDenialLanguage(message);
+  const escalation = containsEscalationLanguage(message);
+  const pending = /\bpending\b|\bunder review\b|\bawait(?:s|ing)\b/i.test(message);
+  const alreadyPaid = /\b(?:already|successfully|has been|was)\s+(?:refunded|paid out|paid|issued|completed)\b|\brefund(?:ed)?\s+(?:has been|was)\s+(?:completed|paid|issued)\b/i.test(
+    message,
+  );
+
+  if (status === "APPROVED") {
+    if (
+      approval &&
+      !/\bnot\s+(?:been\s+)?approved\b|\bnever\s+approved\b|\bwasn['’]?t\s+approved\b/i.test(
+        message,
+      ) &&
+      !denial &&
+      !escalation &&
+      !pending &&
+      !alreadyPaid
+    ) {
+      return message;
+    }
+  }
+
+  if (status === "DENIED") {
+    if (denial && !approval && !escalation && !pending) {
+      return message;
+    }
+  }
+
+  if (status === "ESCALATED") {
+    if (escalation && pending && !approval && !denial) {
+      return message;
+    }
+  }
+
+  return customerMessageFallbacks[status];
+}
+
 export type OrchestrateRefundInput = {
   orderId: string;
   reasonCategory: RefundReasonCategory;
@@ -147,7 +224,10 @@ export async function orchestrateRefund(
       status: policyEvaluation.hardDecision,
       rulesTriggered: [...policyEvaluation.rulesTriggered],
       aiReasoning: policyEvaluation.policySummary,
-      customerMessage: buildHardDecisionMessage(policyEvaluation),
+      customerMessage: validateCustomerMessage(
+        policyEvaluation.hardDecision,
+        buildHardDecisionMessage(policyEvaluation),
+      ),
       policyEvaluation,
       aiAnalysis: null,
     };
@@ -173,8 +253,7 @@ export async function orchestrateRefund(
         error instanceof AiServiceError
           ? error.message
           : "AI analysis failed unexpectedly.",
-      customerMessage:
-        "Your request has been escalated for manual review because we couldn't complete automated analysis.",
+      customerMessage: validateCustomerMessage("ESCALATED", undefined),
       policyEvaluation,
       aiAnalysis: null,
     };
@@ -183,10 +262,7 @@ export async function orchestrateRefund(
   // The AI can flag suspicious/conflicting content (e.g. prompt-injection attempts),
   // but it can never DENY — the worst it can trigger is ESCALATED.
   if (aiAnalysis.suspicious) {
-    const customerMessage =
-      aiAnalysis.customerMessage && !/approv/i.test(aiAnalysis.customerMessage)
-        ? aiAnalysis.customerMessage
-        : "Your request has been escalated to our support team for human review.";
+    const customerMessage = validateCustomerMessage("ESCALATED", aiAnalysis.customerMessage);
 
     return {
       status: "ESCALATED",
@@ -198,10 +274,7 @@ export async function orchestrateRefund(
     };
   }
 
-  const customerMessage =
-    aiAnalysis.customerMessage && /approv/i.test(aiAnalysis.customerMessage)
-      ? aiAnalysis.customerMessage
-      : "Your refund request has been approved.";
+  const customerMessage = validateCustomerMessage("APPROVED", aiAnalysis.customerMessage);
 
   return {
     status: "APPROVED",
