@@ -9,6 +9,7 @@ import {
 import {
   analyzeRefundRequest,
   AiServiceError,
+  isInstructionOverride,
   type AiAnalysis,
   type AiCustomerContext,
   type AiOrderContext,
@@ -228,6 +229,19 @@ export async function orchestrateRefund(
         policyEvaluation.hardDecision,
         buildHardDecisionMessage(policyEvaluation),
       ),
+      policyEvaluation,
+      aiAnalysis: null,
+    };
+  }
+
+  // Enforce known instruction-override detection at the decision boundary too.
+  // This guarantee must not depend on a particular AI service implementation.
+  if (isInstructionOverride(input.customerStatement)) {
+    return {
+      status: "ESCALATED",
+      rulesTriggered: [...policyEvaluation.rulesTriggered, "AI_FLAGGED_SUSPICIOUS"],
+      aiReasoning: "The customer statement contains an instruction-override attempt.",
+      customerMessage: validateCustomerMessage("ESCALATED", undefined),
       policyEvaluation,
       aiAnalysis: null,
     };

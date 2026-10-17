@@ -104,12 +104,17 @@ CRITICAL INSTRUCTIONS FOR OUTPUT FIELDS:
 export function isInstructionOverride(statement: string): boolean {
   const normalized = statement.toLowerCase().replace(/\s+/g, " ");
   const patterns = [
-    /ignore\s+(all\s+)?(previous\s+|prior\s+|above\s+|your\s+)?(instructions|policy|rules)/i,
+    /ignore\s+(all\s+|any\s+|the\s+|your\s+)?(previous\s+|prior\s+|above\s+|your\s+)?(instructions|refund\s+policies?|policies|eligibility\s+restrictions?|rules)/i,
     /disregard\s+(all\s+)?(previous\s+|prior\s+|above\s+|your\s+)?(instructions|policy|rules)/i,
     /forget\s+(all\s+)?(previous\s+|prior\s+|above\s+|your\s+)?(instructions|policy|rules)/i,
     /system\s+override/i,
+    /(?:admin|administrator)\s+override/i,
     /override\s+(the\s+|all\s+|your\s+)?(refund\s+|final-sale\s+)?(policy|rules|system|instructions)/i,
     /bypass\s+(the\s+|all\s+|your\s+)?(refund\s+)?(policy|rules|system|instructions)/i,
+    /(?:change|modify|rewrite)\s+(the\s+)?(?:purchase|order)\s+date/i,
+    /bypass\s+(?:the\s+)?(?:\$?\s*500|five hundred)\s*(?:threshold|limit|rule)/i,
+    /(?:suppress|skip|avoid)\s+(?:the\s+)?(?:human|support)\s+review/i,
+    /(?:system|developer)\s+(?:message|instruction|directive)/i,
     /developer\s+mode/i,
     /(reveal|show|print)\s+(the\s+)?(system\s+)?prompt/i,
   ];
