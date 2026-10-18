@@ -552,7 +552,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (`58 tests, 13 suites, 0 failures`)
+### Test Coverage (`68 tests, 0 failures`)
 1. **`policyEngine.test.ts`**:
    - Denies orders with final sale items.
    - Denies orders purchased >30 days ago.
@@ -576,6 +576,47 @@ npm test
    - Integrates with orchestrator output.
 5. **`index.test.ts`**:
    - Validates HTTP endpoints, input payloads, status codes, and JSON response shapes.
+
+## Security Testing
+
+The refund workflow combines deterministic policy evaluation, AI-assisted request analysis, and backend-controlled final decisions. The AI does not directly modify order records or independently set the final refund status or amount.
+
+### Security Invariants
+
+- Deterministic refund policies take precedence over customer instructions and AI analysis.
+- Final-sale and expired-window requests cannot be approved by the AI.
+- Refunds exceeding the configured `$500` threshold require escalation.
+- Known instruction-override patterns are escalated before AI analysis.
+- AI analysis failures do not result in automatic approval.
+- Customer-facing responses are validated against the final decision, with application-generated fallbacks for invalid or contradictory messages.
+- Customer statements are treated as untrusted content and cannot modify trusted order fields such as purchase date, amount, final-sale status, or product identity.
+
+### Automated Coverage
+
+- Known instruction-override patterns, including administrator, system-message, policy-bypass, date-manipulation, threshold-bypass, and human-review-suppression variants.
+- Orchestration-boundary enforcement when an injected or alternate analyzer incorrectly returns an approval.
+- Hard-policy precedence for final-sale, expired-window, and over-$500 requests, including verification that AI is not called.
+- AI failures, malformed or schema-invalid responses, and invalid customer-facing messages.
+- Customer-response validation, fallback behavior, and protection against returning the original customer statement.
+- Full server test suite and backend build.
+
+### Completed Manual Deployed-Demo Checks
+
+These checks were performed against synthetic demo data in the deployed application:
+
+- [x] Direct instruction-override attempt was escalated.
+- [x] Fake administrator or system-message override was escalated.
+- [x] An override embedded in a quoted delivery report was escalated.
+- [x] Mixed legitimate customer details and malicious instructions did not produce an approval.
+- [x] A normal damage report remained a false-positive control and followed the normal eligible flow.
+- [x] Final-sale and over-$500 policy precedence remained authoritative.
+- [x] Stored order fields and audit records remained consistent with trusted data.
+
+These manual checks supplement the automated suite; they do not establish complete prompt-injection resistance. They were performed using synthetic demonstration records, not real customer or payment data.
+
+### Limitations
+
+Instruction detection uses deterministic pattern matching alongside AI analysis. Pattern matching does not cover every possible prompt-injection technique, and AI analysis remains probabilistic for novel or indirect attacks. The system is designed to preserve policy and decision integrity rather than claim complete detection of malicious language.
 
 ---
 
