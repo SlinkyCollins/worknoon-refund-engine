@@ -184,6 +184,27 @@ describe("refundPersistence", () => {
     assert.equal(result.auditLog?.customerMessage, "Approved for incorrect item.");
   });
 
+  it("validates a flattened customer message before persisting it", async () => {
+    const prisma = createFakePrisma();
+
+    const result = await persistRefundDecision(
+      {
+        orderId: "order-405",
+        customerId: "customer-405",
+        reasonCategory: RefundReasonCategory.INCORRECT_ITEM,
+        customerStatement: "The item was incorrect.",
+        status: DecisionStatus.APPROVED,
+        customerMessage: "Your order has been fully refunded for $84.",
+      },
+      { prisma },
+    );
+
+    assert.equal(
+      result.auditLog?.customerMessage,
+      "Your refund request has been approved. The refund has not necessarily been completed or paid out yet.",
+    );
+  });
+
   it("auto-resolves customerId when omitted by querying the order", async () => {
     const orders = new Map<string, { id: string; customerId: string }>([
       ["order-505", { id: "order-505", customerId: "resolved-customer-505" }],

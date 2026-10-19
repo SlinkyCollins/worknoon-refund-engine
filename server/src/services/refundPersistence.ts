@@ -1,6 +1,9 @@
 import "dotenv/config";
 import { PrismaClient, type DecisionStatus, type RefundReasonCategory } from "@prisma/client";
-import { OrderNotFoundError } from "./refundOrchestrator.js";
+import {
+  OrderNotFoundError,
+  validateCustomerMessage,
+} from "./refundOrchestrator.js";
 
 export type DecisionPayload = {
   status: DecisionStatus;
@@ -122,7 +125,8 @@ export async function persistRefundDecision(
 
   const rulesTriggered = Array.from(input.decision?.rulesTriggered ?? input.rulesTriggered ?? []);
   const aiReasoning = input.decision?.aiReasoning ?? input.aiReasoning ?? "";
-  const customerMessage = input.decision?.customerMessage ?? input.customerMessage ?? "";
+  const proposedCustomerMessage = input.decision?.customerMessage ?? input.customerMessage;
+  const customerMessage = validateCustomerMessage(status, proposedCustomerMessage);
 
   const record = await prisma.refundRequest.create({
     data: {

@@ -421,4 +421,31 @@ describe("orchestrateRefund", () => {
     assert.equal(result.aiReasoning.includes("AI team"), false);
     assert.equal(result.aiReasoning.toLowerCase().includes("eligible for ai review"), false);
   });
+
+  const paymentCompletionClaims = [
+    "Your refund has been completed.",
+    "Your money has been returned to your account.",
+    "The $84 refund has been processed successfully.",
+    "Your order has been fully refunded for $84.",
+    "Payment has been sent back to your original payment method.",
+  ];
+
+  for (const customerMessage of paymentCompletionClaims) {
+    it(`falls back for unsupported payment-completion claim: ${customerMessage}`, async () => {
+      const result = await orchestrateRefund(baseInput, {
+        prisma: fakePrisma(buildOrder()),
+        now: NOW,
+        analyze: async () =>
+          approvedAiAnalysis({
+            customerMessage,
+          }),
+      });
+
+      assert.equal(result.status, "APPROVED");
+      assert.equal(
+        result.customerMessage,
+        customerMessageFallbacks.APPROVED,
+      );
+    });
+  }
 });
