@@ -139,9 +139,12 @@ describe("analyzeRefundRequest", () => {
     const messages = capturedParameters.messages as Array<{ role: string; content: string }>;
     assert.equal(messages[0].role, "system");
     assert.equal(messages[0].content.includes(customerStatement), false);
-    assert.match(messages[0].content, /valid order record proves that the transaction exists/i);
+    assert.match(messages[0].content, /valid order record proves only that the transaction exists/i);
     assert.match(messages[0].content, /does not prove that the customer personally authorized/i);
-    assert.match(messages[0].content, /do not describe that claim as contradicted solely because the order exists/i);
+    assert.match(messages[0].content, /do not describe that claim as false or contradicted solely because the order exists/i);
+    assert.match(messages[0].content, /transaction existence from transaction authorization/i);
+    assert.match(messages[0].content, /use "contradicts" only for a direct conflict/i);
+    assert.match(messages[0].content, /state the customer claim as a claim/i);
     assert.equal(messages[1].role, "user");
     assert.ok(messages[1].content.includes("---BEGIN UNTRUSTED CUSTOMER CONTENT---"));
     assert.ok(messages[1].content.includes(customerStatement));
