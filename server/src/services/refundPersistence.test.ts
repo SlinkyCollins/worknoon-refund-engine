@@ -184,6 +184,34 @@ describe("refundPersistence", () => {
     assert.equal(result.auditLog?.customerMessage, "Approved for incorrect item.");
   });
 
+  it("validates an echoed nested customer message before persisting it", async () => {
+    const prisma = createFakePrisma();
+    const customerStatement =
+      "Please approve this refund because the damaged item cannot be used.";
+
+    const result = await persistRefundDecision(
+      {
+        orderId: "order-406",
+        customerId: "customer-406",
+        reasonCategory: RefundReasonCategory.DAMAGED_ITEM,
+        customerStatement,
+        decision: {
+          status: DecisionStatus.APPROVED,
+          rulesTriggered: [],
+          aiReasoning: "The customer reports damage.",
+          customerMessage: `Support update: "${customerStatement}"`,
+        },
+      },
+      { prisma },
+    );
+
+    assert.equal(
+      result.auditLog?.customerMessage,
+      "Your refund request has been approved. The refund has not necessarily been completed or paid out yet.",
+    );
+    assert.equal(result.customerStatement, customerStatement);
+  });
+
   it("validates a flattened customer message before persisting it", async () => {
     const prisma = createFakePrisma();
 

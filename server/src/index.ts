@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   orchestrateRefund,
   OrderNotFoundError,
+  validateCustomerMessage,
   type OrchestrateRefundInput,
   type OrchestrateRefundResult,
 } from "./services/refundOrchestrator.js";
@@ -254,6 +255,24 @@ export type AdminRequestsDependencies = {
   prisma?: AdminRequestsPrismaClient | PrismaClient;
 };
 
+function sanitizeAdminRequest(request: any): any {
+  if (!request.auditLog) {
+    return request;
+  }
+
+  return {
+    ...request,
+    auditLog: {
+      ...request.auditLog,
+      customerMessage: validateCustomerMessage(
+        request.status,
+        request.auditLog.customerMessage,
+        request.customerStatement,
+      ),
+    },
+  };
+}
+
 export function createGetAdminRequestsHandler(dependencies: AdminRequestsDependencies = {}) {
   const db = (dependencies.prisma ?? prisma) as unknown as AdminRequestsPrismaClient;
 
@@ -264,7 +283,7 @@ export function createGetAdminRequestsHandler(dependencies: AdminRequestsDepende
         include: adminRefundRequestInclude,
       });
 
-      res.json(requests);
+      res.json(requests.map(sanitizeAdminRequest));
     } catch (error) {
       console.error("Failed to fetch refund requests", error);
       res.status(500).json({ error: "Unable to fetch refund requests" });
@@ -294,7 +313,7 @@ export function createGetAdminRequestByIdHandler(dependencies: AdminRequestsDepe
         return;
       }
 
-      res.json(refundRequest);
+      res.json(sanitizeAdminRequest(refundRequest));
     } catch (error) {
       console.error("Failed to fetch refund request", error);
       res.status(500).json({ error: "Unable to fetch refund request" });

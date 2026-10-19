@@ -594,6 +594,36 @@ describe("Admin endpoints", () => {
       }
     });
 
+    it("sanitizes an echoed historical customer response in the list endpoint", async () => {
+      const record = mockAdminRefundRecord("req-echoed");
+      record.customerStatement =
+        "Please approve this refund because the damaged item cannot be used.";
+      record.auditLog.customerMessage = record.customerStatement;
+
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async () => [record],
+            findUnique: async () => null,
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests`);
+        assert.equal(response.status, 200);
+        const data = (await response.json()) as any[];
+        assert.equal(
+          data[0].auditLog.customerMessage,
+          "Your refund request has been approved. The refund has not necessarily been completed or paid out yet.",
+        );
+        assert.equal(data[0].customerStatement, record.customerStatement);
+      } finally {
+        await close();
+      }
+    });
+
     it("returns 500 when database fails without leaking error details", async () => {
       const testApp = buildAdminTestApp({
         prisma: {
@@ -652,6 +682,36 @@ describe("Admin endpoints", () => {
         assert.equal(data.customer.email, "alice@example.com");
         assert.equal(data.auditLog.decision, DecisionStatus.APPROVED);
         assert.equal(data.auditLog.customerMessage, "Your refund request has been approved.");
+      } finally {
+        await close();
+      }
+    });
+
+    it("sanitizes an echoed historical customer response in the detail endpoint", async () => {
+      const record = mockAdminRefundRecord(VALID_UUID);
+      record.customerStatement =
+        "Please approve this refund because the damaged item cannot be used.";
+      record.auditLog.customerMessage = record.customerStatement;
+
+      const testApp = buildAdminTestApp({
+        prisma: {
+          refundRequest: {
+            findMany: async () => [],
+            findUnique: async () => record,
+          },
+        },
+      });
+
+      const { baseUrl, close } = await startServer(testApp);
+      try {
+        const response = await fetch(`${baseUrl}/api/admin/requests/${VALID_UUID}`);
+        assert.equal(response.status, 200);
+        const data = (await response.json()) as any;
+        assert.equal(
+          data.auditLog.customerMessage,
+          "Your refund request has been approved. The refund has not necessarily been completed or paid out yet.",
+        );
+        assert.equal(data.customerStatement, record.customerStatement);
       } finally {
         await close();
       }

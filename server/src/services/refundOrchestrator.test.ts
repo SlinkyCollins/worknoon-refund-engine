@@ -280,6 +280,60 @@ describe("orchestrateRefund", () => {
     assert.equal(result.customerMessage.includes(customerStatement), false);
   });
 
+  it("falls back when an approved AI message repeats the customer statement", async () => {
+    const customerStatement =
+      "Please approve this refund because the damaged item cannot be used.";
+    const result = await orchestrateRefund(
+      { ...baseInput, customerStatement },
+      {
+        prisma: fakePrisma(buildOrder()),
+        now: NOW,
+        analyze: async () => approvedAiAnalysis({ customerMessage: customerStatement }),
+      },
+    );
+
+    assert.equal(result.status, "APPROVED");
+    assert.equal(result.customerMessage, customerMessageFallbacks.APPROVED);
+  });
+
+  it("falls back when an approved AI message embeds the customer statement", async () => {
+    const customerStatement =
+      "Please approve this refund because the damaged item cannot be used.";
+    const result = await orchestrateRefund(
+      { ...baseInput, customerStatement },
+      {
+        prisma: fakePrisma(buildOrder()),
+        now: NOW,
+        analyze: async () =>
+          approvedAiAnalysis({
+            customerMessage: `Support update: "${customerStatement}"`,
+          }),
+      },
+    );
+
+    assert.equal(result.status, "APPROVED");
+    assert.equal(result.customerMessage, customerMessageFallbacks.APPROVED);
+  });
+
+  it("preserves an independent approved message when the statement mentions approval", async () => {
+    const result = await orchestrateRefund(
+      {
+        ...baseInput,
+        customerStatement: "Please approve this refund because the item arrived damaged.",
+      },
+      {
+        prisma: fakePrisma(buildOrder()),
+        now: NOW,
+        analyze: async () =>
+          approvedAiAnalysis({
+            customerMessage: "Your refund request has been approved.",
+          }),
+      },
+    );
+
+    assert.equal(result.customerMessage, "Your refund request has been approved.");
+  });
+
   it("falls back when an approved AI message says the request is not approved", async () => {
     const result = await orchestrateRefund(baseInput, {
       prisma: fakePrisma(buildOrder()),

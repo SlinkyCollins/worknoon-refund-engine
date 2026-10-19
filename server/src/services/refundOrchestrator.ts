@@ -49,6 +49,30 @@ function containsEscalationLanguage(message: string): boolean {
   );
 }
 
+function normalizeMessageForComparison(message: string): string {
+  return message
+    .toLowerCase()
+    .replace(/[“”‘’"]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function repeatsCustomerStatement(
+  proposedMessage: string,
+  customerStatement: string | undefined,
+): boolean {
+  if (!customerStatement) {
+    return false;
+  }
+
+  const normalizedStatement = normalizeMessageForComparison(customerStatement);
+  if (normalizedStatement.length < 20) {
+    return false;
+  }
+
+  return normalizeMessageForComparison(proposedMessage).includes(normalizedStatement);
+}
+
 /**
  * Keeps customer-facing wording aligned with the status synthesized by this module.
  * Uncertain or contradictory AI wording is replaced with an application-owned message.
@@ -56,6 +80,7 @@ function containsEscalationLanguage(message: string): boolean {
 export function validateCustomerMessage(
   status: FinalStatus,
   proposedMessage: string | null | undefined,
+  customerStatement?: string,
 ): string {
   if (typeof proposedMessage !== "string") {
     return customerMessageFallbacks[status];
@@ -63,6 +88,9 @@ export function validateCustomerMessage(
 
   const message = proposedMessage.trim();
   if (!message || message.length > 1_000) {
+    return customerMessageFallbacks[status];
+  }
+  if (repeatsCustomerStatement(message, customerStatement)) {
     return customerMessageFallbacks[status];
   }
 
@@ -228,6 +256,7 @@ export async function orchestrateRefund(
       customerMessage: validateCustomerMessage(
         policyEvaluation.hardDecision,
         buildHardDecisionMessage(policyEvaluation),
+        input.customerStatement,
       ),
       policyEvaluation,
       aiAnalysis: null,
@@ -241,7 +270,7 @@ export async function orchestrateRefund(
       status: "ESCALATED",
       rulesTriggered: [...policyEvaluation.rulesTriggered, "AI_FLAGGED_SUSPICIOUS"],
       aiReasoning: "The customer statement contains an instruction-override attempt.",
-      customerMessage: validateCustomerMessage("ESCALATED", undefined),
+      customerMessage: validateCustomerMessage("ESCALATED", undefined, input.customerStatement),
       policyEvaluation,
       aiAnalysis: null,
     };
@@ -267,7 +296,7 @@ export async function orchestrateRefund(
         error instanceof AiServiceError
           ? error.message
           : "AI analysis failed unexpectedly.",
-      customerMessage: validateCustomerMessage("ESCALATED", undefined),
+      customerMessage: validateCustomerMessage("ESCALATED", undefined, input.customerStatement),
       policyEvaluation,
       aiAnalysis: null,
     };
@@ -276,7 +305,11 @@ export async function orchestrateRefund(
   // The AI can flag suspicious/conflicting content (e.g. prompt-injection attempts),
   // but it can never DENY — the worst it can trigger is ESCALATED.
   if (aiAnalysis.suspicious) {
-    const customerMessage = validateCustomerMessage("ESCALATED", aiAnalysis.customerMessage);
+    const customerMessage = validateCustomerMessage(
+      "ESCALATED",
+      aiAnalysis.customerMessage,
+      input.customerStatement,
+    );
 
     return {
       status: "ESCALATED",
@@ -288,7 +321,11 @@ export async function orchestrateRefund(
     };
   }
 
-  const customerMessage = validateCustomerMessage("APPROVED", aiAnalysis.customerMessage);
+  const customerMessage = validateCustomerMessage(
+    "APPROVED",
+    aiAnalysis.customerMessage,
+    input.customerStatement,
+  );
 
   return {
     status: "APPROVED",

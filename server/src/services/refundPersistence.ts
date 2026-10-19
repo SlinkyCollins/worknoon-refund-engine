@@ -126,7 +126,11 @@ export async function persistRefundDecision(
   const rulesTriggered = Array.from(input.decision?.rulesTriggered ?? input.rulesTriggered ?? []);
   const aiReasoning = input.decision?.aiReasoning ?? input.aiReasoning ?? "";
   const proposedCustomerMessage = input.decision?.customerMessage ?? input.customerMessage;
-  const customerMessage = validateCustomerMessage(status, proposedCustomerMessage);
+  const customerMessage = validateCustomerMessage(
+    status,
+    proposedCustomerMessage,
+    input.customerStatement,
+  );
 
   const record = await prisma.refundRequest.create({
     data: {
