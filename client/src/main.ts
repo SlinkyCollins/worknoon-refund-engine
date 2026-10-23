@@ -4,6 +4,7 @@ import App from './App.vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import RefundSupport from './components/RefundSupport.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
+import { initPerfDiagnostics } from './services/perfDiagnostics'
 
 const routes = [
   { path: '/', component: RefundSupport },
@@ -18,4 +19,5 @@ const router = createRouter({
 const app = createApp(App)
 
 app.use(router)
+initPerfDiagnostics()
 app.mount('#app')
